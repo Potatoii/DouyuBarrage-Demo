@@ -4,4 +4,4 @@
 
 开发:python3.8.10
 
-python get_ws/ws_main.py
+python -m get_ws.ws_main

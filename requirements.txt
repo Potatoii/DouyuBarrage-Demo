@@ -1,1 +1,2 @@
+loguru~=0.7.2
 aiowebsocket~=1.0.0.dev2

@@ -2,10 +2,7 @@ import asyncio
 import re
 import time
 
-from aiowebsocket.converses import Converse
-
 import settings
-
 from commons.log_utils import logger
 
 
@@ -27,28 +24,48 @@ class DouyuWebSocket:
         msg_bytes = await self.dy_encode(msg)
         return msg_bytes
 
-    async def keeplive(self, converse: Converse) -> None:
+    async def keeplive(self, websocket) -> None:
         while True:
             """
             保持心跳
             """
             msg = f"type@=keeplive/tick@={str(int(time.time()))}/\0"
             beat_msg = await self.dy_encode(msg)
-            await converse.send(beat_msg)
+            await websocket.send(beat_msg)
+            logger.debug("发送心跳")
             await asyncio.sleep(15)
 
-    async def on_message(self, message: bytes) -> dict:
+    async def on_message(self, message: bytes):
         """
         将字节流转化为字符串，忽略无法解码的错误（即斗鱼协议中的头部尾部）
         """
         msg = message.decode(encoding="utf-8", errors="ignore")
-        if re.search(r"type@=(.*?)/", msg):
-            msg_type = re.search(r"type@=(.*?)/", msg).group(1)
-            if msg_type == "chatmsg":
-                barrage_dict = await self.format_barrage_dict(msg)
-                return barrage_dict
-        elif re.search(r"@AA", msg):
+        logger.debug(f"收到消息:{msg}")
+        if re.search(r"@AA", msg):
             return {}
+        elif re.search(r"type@=(.*?)/", msg):
+            msg_type = re.search(r"type@=(.*?)/", msg).group(1)
+            uid_re = re.search(r"uid@=(.*?)/", msg)
+            if uid_re:
+                uid = int(uid_re.group(1))
+                if uid in settings.EYEFUCK_ID_LIST:
+                    if msg_type == "uenter":
+                        nickname = re.search(r"nn@=(.*?)/", msg).group(1)
+                        level = int(re.search(r"level@=(.*?)/", msg).group(1))
+                        logger.info(
+                            f"[Lv{level}] {nickname} 进入了直播间")
+                    elif msg_type == "chatmsg":
+                        chatmsg_dict = await self.format_chatmsg_dict(msg)
+                        if chatmsg_dict.get("bnn"):
+                            logger.info(
+                                f"[Lv{chatmsg_dict.get('level')}]【{chatmsg_dict.get('bnn')}】{chatmsg_dict.get('nickname')}:{chatmsg_dict.get('content')}")
+                        else:
+                            logger.info(
+                                f"[Lv{chatmsg_dict.get('level')}]{chatmsg_dict.get('nickname')}:{chatmsg_dict.get('content')}")
+                    elif msg_type == "dgb":
+                        logger.info(f"收到礼物消息:{msg}")
+                    else:
+                        logger.info(f"收到消息:{msg}")
         else:
             logger.error(f"奇怪的msg:{msg}")
 
@@ -73,9 +90,9 @@ class DouyuWebSocket:
         return data
 
     @classmethod
-    async def format_barrage_dict(cls, msg: str) -> dict:
+    async def format_chatmsg_dict(cls, msg: str) -> dict:
         try:
-            barrage_dict = dict(
+            chatmsg_dict = dict(
                 rid=int(re.search(r"rid@=(.*?)/", msg).group(1)),  # 房间号
                 uid=int(re.search(r"uid@=(.*?)/", msg).group(1)),  # 用户id
                 nickname=re.search(r"nn@=(.*?)/", msg).group(1),  # 用户昵称
@@ -86,7 +103,7 @@ class DouyuWebSocket:
                 is_diaf=int(re.search(r"diaf@=(.*?)/", msg).group(1)) if "diaf@=" in msg else 0,  # 是否是钻石粉丝
                 content=re.search(r"txt@=(.*?)/", msg).group(1)  # 弹幕内容
             )
-            return barrage_dict
+            return chatmsg_dict
         except:  # noqa
             logger.error(f"奇怪的msg:{msg}")
             return {}

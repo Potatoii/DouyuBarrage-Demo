@@ -4,8 +4,7 @@ import threading
 from aiowebsocket.converses import AioWebSocket
 
 from commons.log_utils import logger
-from get_ws.douyu_websocket import DouyuWebSocket
-from get_ws import ws_utils
+from douyu_websocket import DouyuWebSocket
 from settings import PROXY_URL
 
 
@@ -37,21 +36,13 @@ async def startup():
     asyncio.run_coroutine_threadsafe(douyu_websocket.keeplive(converse), beat_loop)  # 保持心跳
     while True:
         receive = await converse.receive()
-        barrage_dict = await douyu_websocket.on_message(receive)
-        if barrage_dict and isinstance(barrage_dict, dict):
-            await ws_utils.console_log(barrage_dict)
-            await ws_utils.check_superchat(barrage_dict)
+        await douyu_websocket.on_message(receive)
 
 
 if __name__ == "__main__":
     try:
         logger.info("#####-启动程序-#####")
         loop = asyncio.get_event_loop()
-
-        # 起一个线程用来处理数据库操作
-        handler_loop = asyncio.new_event_loop()
-        sql = threading.Thread(target=start_handler_loop, args=(handler_loop,))
-        sql.start()
 
         # 起一个线程用来发送心跳
         beat_loop = asyncio.new_event_loop()

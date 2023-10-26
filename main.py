@@ -5,6 +5,7 @@ from aiowebsocket.converses import AioWebSocket
 
 from commons.log_utils import logger
 from douyu_websocket import DouyuWebSocket
+from gift import Gift
 from settings import PROXY_URL
 
 
@@ -27,13 +28,16 @@ async def startup():
     aiows = await init_aiows()
     converse = aiows.manipulator
     logger.info("#####-正在连接弹幕服务器-#####")
-    douyu_websocket = DouyuWebSocket()
+    gift_object = Gift()
+    await gift_object.init_gifts()
+    douyu_websocket = DouyuWebSocket(gift_object.gifts)
     login = await douyu_websocket.login_msg()
     await converse.send(login)
     group = await douyu_websocket.group_msg()
     await converse.send(group)
     logger.info("#####-成功连接弹幕服务器-#####")
     asyncio.run_coroutine_threadsafe(douyu_websocket.keeplive(converse), beat_loop)  # 保持心跳
+    times = 0
     while True:
         receive = await converse.receive()
         await douyu_websocket.on_message(receive)

@@ -1,14 +1,16 @@
 import asyncio
 import re
 import time
+from typing import Dict
 
 import settings
 from commons.log_utils import logger
 
 
 class DouyuWebSocket:
-    def __init__(self):
+    def __init__(self, gifts: Dict):
         self.room_id = settings.ROOM_ID
+        self.gifts = gifts
 
     async def login_msg(self):
         """
@@ -52,8 +54,7 @@ class DouyuWebSocket:
                     if msg_type == "uenter":
                         nickname = re.search(r"nn@=(.*?)/", msg).group(1)
                         level = int(re.search(r"level@=(.*?)/", msg).group(1))
-                        logger.info(
-                            f"[Lv{level}] {nickname} 进入了直播间")
+                        logger.info(f"[Lv{level}] {nickname} 进入了直播间")
                     elif msg_type == "chatmsg":
                         chatmsg_dict = await self.format_chatmsg_dict(msg)
                         if chatmsg_dict.get("bnn"):
@@ -63,9 +64,22 @@ class DouyuWebSocket:
                             logger.info(
                                 f"[Lv{chatmsg_dict.get('level')}]{chatmsg_dict.get('nickname')}:{chatmsg_dict.get('content')}")
                     elif msg_type == "dgb":
-                        logger.info(f"收到礼物消息:{msg}")
+                        try:
+                            gift_id_list = re.findall(r"gfid@=(.*?)/", msg)
+                            gift_count_list = re.findall(r"gfcnt@=(.*?)/", msg)
+                            for gift_id, gift_count in zip(gift_id_list, gift_count_list):
+                                nickname = re.search(r"nn@=(.*?)/", msg).group(1)
+                                level = int(re.search(r"level@=(.*?)/", msg).group(1))
+                                gift_name = self.gifts[gift_id]["name"]
+                                gift_value = self.gifts[gift_id]["pc"] / 100
+                                logger.info(f"[Lv{level}] {nickname} 赠送了价值 {gift_value * int(gift_count)}¥ 的 {gift_name}*{int(gift_count)}")
+                        except KeyError as e:
+                            logger.error(f"礼物id:{e}不存在")
+                        except Exception as e:
+                            logger.error(e)
+                            logger.info(f"收到礼物消息:{msg}")
                     else:
-                        logger.info(f"收到消息:{msg}")
+                        logger.debug(f"收到消息:{msg}")
         else:
             logger.error(f"奇怪的msg:{msg}")
 
